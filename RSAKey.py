@@ -12,8 +12,8 @@ def generate_rsa_keypair():
     # 오일러 파이 함수
     phi_n = (p - 1) * (q - 1)
     
-    # 공개 키, 서로소 아니면 다시
-    e = 65537 #이거 맞나?
+    #공개 키
+    e = random.choice(range(2, phi_n))
     while gcd(e, phi_n) != 1:
         e = random.choice(range(2, phi_n))
     
@@ -33,6 +33,24 @@ def generate_rsa_keypair():
     print(json.dumps(response))  # 이부분은 테스트용, 이후에 지울 것
     return response
 
-if __name__ == '__main__':
-    generate_rsa_keypair()
+def verify_rsa_keypair(response):    # Alice가 Bob으로부터 받은 키를 검증
+    p = response["parameter"]["p"]
+    q = response["parameter"]["q"]
+    e = response["public"]
+    d = response["private"]
+
+    # n과 파이 계산
+    n = p * q
+    phi_n = (p - 1) * (q - 1)
+
+    # 검증
+    if (e * d) % phi_n == 1:
+        print("Alice: RSA key pair is valid.")
+    else:
+        print("Alice: RSA key pair is invalid.")
+
+
+if __name__ == "__main__":
+    response = generate_rsa_keypair()
+    verify_rsa_keypair(response)
 
