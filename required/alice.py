@@ -2,6 +2,7 @@ import socket
 import argparse
 import logging
 import json
+from prime import primes_in_range
 
 def send_rsa_key_request(conn):
     # Send RSA key request to Bob
