@@ -1,4 +1,4 @@
-def primes_in_range(lower=20000, upper=30000):
+def primes_in_range(lower=400, upper=500):
     if upper < 2:
         return []
 
