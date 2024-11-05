@@ -28,25 +28,21 @@ def send_encrypted_message(conn):
     conn.sendall(encrypted_message.encode())
     logging.info("Sent encrypted message to Bob")
 
-def run(addr, port, opcode, msg_type=None):
+def run(addr, port, msg_type=None):
     conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     conn.connect((addr, port))
     logging.info("Alice is connected to {}:{}".format(addr, port))
-
+    opcode = 0
+    
     # Select protocol based on opcode and type
-    if opcode == 0:
-        if msg_type == "RSAKey":
-            send_rsa_key_request(conn)
-        elif msg_type == "RSA":
-            send_rsa_encryption_request(conn)
-        elif msg_type == "DH":
-            send_dh_request(conn)
-        else:
-            logging.warning("Unknown type for opcode 0.")
-    elif opcode == 2:
-        send_encrypted_message(conn)
+    if msg_type == "RSAKey":
+        send_rsa_key_request(conn)
+    elif msg_type == "RSA":
+        send_rsa_encryption_request(conn)
+    elif msg_type == "DH":
+        send_dh_request(conn)
     else:
-        logging.warning("Unknown opcode.")
+        logging.warning("Unknown type of request by Alice")
     
     conn.close()
 
@@ -55,7 +51,6 @@ def command_line_args():
     parser.add_argument("-a", "--addr", metavar="<bob's address>", help="Bob's address", type=str, required=True)
     parser.add_argument("-p", "--port", metavar="<bob's port>", help="Bob's port", type=int, required=True)
     parser.add_argument("-l", "--log", metavar="<log level (DEBUG/INFO/WARNING/ERROR/CRITICAL)>", help="Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL)", type=str, default="INFO")
-    parser.add_argument("--opcode", metavar="<opcode>", help="Opcode to send", type=int, required=True)
     parser.add_argument("--type", metavar="<type>", help="Type of request (RSAKey, RSA, DH)", type=str)
     args = parser.parse_args()
     return args
@@ -65,7 +60,7 @@ def main():
     log_level = args.log
     logging.basicConfig(level=log_level)
 
-    run(args.addr, args.port, args.opcode, args.type)
+    run(args.addr, args.port, args.type)
 
 if __name__ == "__main__":
     main()
