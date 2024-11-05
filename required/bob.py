@@ -4,6 +4,7 @@ import argparse
 import logging
 import json
 import select
+from prime import primes_in_range
 
 def handler(sock, stop_event):
     try:
