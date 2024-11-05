@@ -20,16 +20,21 @@ def handler(sock, stop_event):
             if opcode == 0:
                 if msg_type == "RSAKey":
                     logging.info("Received RSA key generation request from Alice.")
+                    # RSAKey()
                 elif msg_type == "RSA":
                     logging.info("Received RSA encryption/decryption request from Alice.")
+                    # RSA()
                 elif msg_type == "DH":
                     logging.info("Received Diffie-Hellman key exchange request from Alice.")
+                    # DF()
                 else:
                     logging.warning("Unknown type for opcode 0.")
             elif opcode == 2:
                 logging.info("Received encrypted message from Alice.")
+                # 어쩌고()
             elif opcode == 99 and msg_type == "exit":
                 logging.info("Received exit command. Shutting down Bob server.")
+                # 이건 무시하삼
                 stop_event.set()  # Signal to stop the server
             else:
                 logging.warning("Unknown opcode.")
