@@ -14,5 +14,5 @@ def primes_in_range(lower=400, upper=500):
     return primes
 
 if __name__ == '__main__':
-    primes_between_20000_and_30000 = primes_in_range()
+    primes_between_20000_and_30000 = primes_in_range(lower=20000, upper=30000)
     print(primes_between_20000_and_30000)
