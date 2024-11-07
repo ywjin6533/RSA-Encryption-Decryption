@@ -1,8 +1,10 @@
 import socket
-import argparse
-import logging
 import json
-from RSAkey import verify_rsa_keypair
+import logging
+from prime import primes_in_range
+from RSAKey import verify_rsa_keypair
+from cryptography.hazmat.primitives.asymmetric import rsa
+import os
 
 def send_rsa_key_request(conn):
     # Send RSA key request to Bob
@@ -64,6 +66,35 @@ def command_line_args():
     parser.add_argument("--type", metavar="<type>", help="Type of request (RSAKey, RSA, DH)", type=str)
     args = parser.parse_args()
     return args
+
+def generate_aes_key():
+    return os.urandom(32)
+
+def encrypt_aes_key_byte_by_byte(aes_key, public_key_n, public_key_e):
+    # RSA 공개키
+    encrypted_key = []
+    for byte in aes_key:
+        encrypted_byte = pow(byte, public_key_e, public_key_n)
+        encrypted_key.append(encrypted_byte)
+    return encrypted_key
+
+def send_encrypted_aes_key(conn, encrypted_key):
+    message = json.dumps({"opcode": 2, "encrypted_key": encrypted_key})
+    conn.sendall(message.encode())
+    logging.info("Sent encrypted AES key to Bob")
+
+
+def main_routine_with_encryption(conn, response): # RSA 공개키 검증
+    verify_rsa_keypair(response)
+    
+    aes_key = generate_aes_key()
+    logging.info("Generated AES key")
+
+    # 암호화
+    encrypted_aes_key = encrypt_aes_key_byte_by_byte(aes_key, response["parameter"]["n"], response["public"])
+    logging.info("Encrypted AES key byte-by-byte with RSA public key")
+
+    send_encrypted_aes_key(conn, encrypted_aes_key)
 
 def main():
     args = command_line_args()
