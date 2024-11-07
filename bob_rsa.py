@@ -4,7 +4,7 @@ import argparse
 import logging
 import json
 import select
-from RSAkey import generate_rsa_keypair
+from RSAKey import generate_rsa_keypair
 
 def handler(sock, stop_event):
     try:
@@ -21,23 +21,30 @@ def handler(sock, stop_event):
             if opcode == 0:
                 if msg_type == "RSAKey":
                     logging.info("Received RSA key generation request from Alice.")
-                    response = generate_rsa_keypair()
-                    sock.sendall(response.encode())
-                    # RSAKey()
+                    
+                    # RSA 키 생성
+                    response = generate_rsa_keypair()  # RSAKey.py의 함수 호출
+                    
+                    # 응답을 JSON으로 직렬화 및 로깅
+                    response_json = json.dumps(response)
+                    logging.info("Final response to send to Alice: %s", response_json)  # 디버깅용 로그
+                    
+                    # 응답 전송
+                    sock.sendall(response_json.encode())
+
                 elif msg_type == "RSA":
                     logging.info("Received RSA encryption/decryption request from Alice.")
-                    # RSA()
+                    # RSA 암호화/복호화 로직 추가 가능
                 elif msg_type == "DH":
                     logging.info("Received Diffie-Hellman key exchange request from Alice.")
-                    # DF()
+                    # Diffie-Hellman 처리 로직 추가 가능
                 else:
                     logging.warning("Unknown type for opcode 0.")
             elif opcode == 2:
                 logging.info("Received encrypted message from Alice.")
-                # 어쩌고()
+                # 암호화된 메시지 처리 로직 추가 가능
             elif opcode == 99 and msg_type == "exit":
                 logging.info("Received exit command. Shutting down Bob server.")
-                # 이건 무시하삼
                 stop_event.set()  # Signal to stop the server
             else:
                 logging.warning("Unknown opcode.")

@@ -30,7 +30,8 @@ def generate_rsa_keypair():
     }
     
     # 응답 반환
-    print(json.dumps(response))  # 이부분은 테스트용, 이후에 지울 것
+    print("Generated RSA Key Pair Response:", json.dumps(response))
+    # print(json.dumps(response))  # 이부분은 테스트용, 이후에 지울 것
     return response
 
 def verify_rsa_keypair(response):    # Alice가 Bob으로부터 받은 키를 검증
