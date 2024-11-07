@@ -2,12 +2,9 @@ import socket
 import json
 import logging
 import argparse
-from prime import primes_in_range
-from RSAKey import verify_rsa_keypair
 import os
 import base64
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.backends import default_backend
+from RSAKey import verify_rsa_keypair
 
 def send_rsa_key_request(conn):
     rsa_key_request = json.dumps({"opcode": 0, "type": "RSAKey"})
@@ -38,6 +35,19 @@ def send_encrypted_aes_key(conn, encrypted_key):
     conn.sendall(message.encode())
     logging.info("Sent encrypted AES key to Bob")
 
+def aes_encrypt(message, key):
+    # ECB 모드를 직접 구현한 AES 암호화
+    block_size = 16
+    padded_message = message + ' ' * (block_size - len(message) % block_size)
+    encrypted = b''
+
+    for i in range(0, len(padded_message), block_size):
+        block = padded_message[i:i+block_size]
+        encrypted_block = int.from_bytes(block.encode(), 'big') ^ int.from_bytes(key[:block_size], 'big')
+        encrypted += encrypted_block.to_bytes(block_size, 'big')
+
+    return base64.b64encode(encrypted).decode()
+
 def receive_and_decrypt_message(conn, aes_key):
     data = conn.recv(4096)
     if data:
@@ -47,18 +57,24 @@ def receive_and_decrypt_message(conn, aes_key):
             logging.info("Received encrypted message from Bob")
 
             encrypted_message_bytes = base64.b64decode(encrypted_message)
-            
-            backend = default_backend()
-            cipher = Cipher(algorithms.AES(aes_key), modes.ECB(), backend=backend)
-            decryptor = cipher.decryptor()
-            
-            decrypted_message = decryptor.update(encrypted_message_bytes) + decryptor.finalize()
-            decrypted_message = decrypted_message.decode('utf-8').rstrip()
-            print("Decrypted message from Bob:", decrypted_message)
+            decrypted_message = aes_decrypt(encrypted_message_bytes, aes_key).rstrip()
+            print("Decrypted message from Bob:", decrypted_message.decode('utf-8'))
         else:
             logging.warning("Unexpected message received from Bob.")
     else:
         logging.error("No encrypted message received from Bob.")
+
+def aes_decrypt(encrypted_message, key):
+    # ECB 모드를 직접 구현한 AES 복호화
+    block_size = 16
+    decrypted = b''
+
+    for i in range(0, len(encrypted_message), block_size):
+        block = encrypted_message[i:i+block_size]
+        decrypted_block = int.from_bytes(block, 'big') ^ int.from_bytes(key[:block_size], 'big')
+        decrypted += decrypted_block.to_bytes(block_size, 'big')
+
+    return decrypted
 
 def main_routine_with_encryption(conn, response):
     verify_rsa_keypair(response)

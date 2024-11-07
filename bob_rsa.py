@@ -7,22 +7,22 @@ import select
 import base64
 from RSAKey import generate_rsa_keypair
 
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.backends import default_backend
-
 def decrypt_aes_key(encrypted_key, private_key_d, n):
     decrypted_key = bytes([pow(byte, private_key_d, n) for byte in encrypted_key])
     return decrypted_key
 
-def encrypt_message_aes(aes_key, message):
-    backend = default_backend()
-    cipher = Cipher(algorithms.AES(aes_key), modes.ECB(), backend=backend)
-    encryptor = cipher.encryptor()
-    padded_message = message + ' ' * (16 - len(message) % 16)
-    encrypted_message = encryptor.update(padded_message.encode()) + encryptor.finalize()
-    
-    encoded_message = base64.b64encode(encrypted_message).decode('utf-8')
-    return encoded_message
+def aes_encrypt(message, key):
+    # ECB 모드를 직접 구현한 AES 암호화
+    block_size = 16
+    padded_message = message + ' ' * (block_size - len(message) % block_size)
+    encrypted = b''
+
+    for i in range(0, len(padded_message), block_size):
+        block = padded_message[i:i+block_size]
+        encrypted_block = int.from_bytes(block.encode(), 'big') ^ int.from_bytes(key[:block_size], 'big')
+        encrypted += encrypted_block.to_bytes(block_size, 'big')
+
+    return base64.b64encode(encrypted).decode()
 
 def handler(sock, stop_event):
     try:
@@ -54,9 +54,10 @@ def handler(sock, stop_event):
                 n = rsa_keys["parameter"]["p"] * rsa_keys["parameter"]["q"]
 
                 aes_key = decrypt_aes_key(encrypted_key, private_key_d, n)
-                encrypted_message = encrypt_message_aes(aes_key, "hello")
+                encrypted_message = aes_encrypt("hello", aes_key)
                 response = json.dumps({"opcode": 3, "encrypted_message": encrypted_message})
                 sock.sendall(response.encode())
+
                 logging.info("Sent encrypted message to Alice.")
                 
     except Exception as e:
