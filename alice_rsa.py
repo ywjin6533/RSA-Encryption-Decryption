@@ -5,14 +5,16 @@ import argparse
 from prime import primes_in_range
 from RSAKey import verify_rsa_keypair
 import os
+import base64
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.backends import default_backend
 
 def send_rsa_key_request(conn):
-    # Send RSA key request to Bob
     rsa_key_request = json.dumps({"opcode": 0, "type": "RSAKey"})
+    logging.info("Preparing RSA key request to send to Bob: %s", rsa_key_request)
     conn.sendall(rsa_key_request.encode())
     logging.info("Sent RSA key request to Bob")
 
-    # Receive response from Bob
     data = conn.recv(4096)
     if not data:
         logging.error("No response received from Bob")
@@ -20,50 +22,64 @@ def send_rsa_key_request(conn):
 
     response = json.loads(data.decode())
     logging.info("Received response from Bob: %s", response)
-    verify_rsa_keypair(response)  # 검증
-    return response  # 공개키 정보를 반환
+    verify_rsa_keypair(response)
+    return response
 
 def generate_aes_key():
-    # 256-bit (32-byte) AES 대칭키 생성
     return os.urandom(32)
 
 def encrypt_aes_key_byte_by_byte(aes_key, public_key_n, public_key_e):
-    # RSA 공개키를 사용해 AES 대칭키의 각 바이트를 암호화
-    encrypted_key = []
-    for byte in aes_key:
-        encrypted_byte = pow(byte, public_key_e, public_key_n)
-        encrypted_key.append(encrypted_byte)
+    encrypted_key = [pow(byte, public_key_e, public_key_n) for byte in aes_key]
     return encrypted_key
 
 def send_encrypted_aes_key(conn, encrypted_key):
-    # 암호화된 AES 키를 JSON 형식으로 전송
     message = json.dumps({"opcode": 2, "encrypted_key": encrypted_key})
+    logging.info("Sending encrypted AES key to Bob")
     conn.sendall(message.encode())
     logging.info("Sent encrypted AES key to Bob")
 
+def receive_and_decrypt_message(conn, aes_key):
+    data = conn.recv(4096)
+    if data:
+        response = json.loads(data.decode())
+        if response.get("opcode") == 3:
+            encrypted_message = response.get("encrypted_message")
+            logging.info("Received encrypted message from Bob")
+
+            encrypted_message_bytes = base64.b64decode(encrypted_message)
+            
+            backend = default_backend()
+            cipher = Cipher(algorithms.AES(aes_key), modes.ECB(), backend=backend)
+            decryptor = cipher.decryptor()
+            
+            decrypted_message = decryptor.update(encrypted_message_bytes) + decryptor.finalize()
+            decrypted_message = decrypted_message.decode('utf-8').rstrip()
+            print("Decrypted message from Bob:", decrypted_message)
+        else:
+            logging.warning("Unexpected message received from Bob.")
+    else:
+        logging.error("No encrypted message received from Bob.")
+
 def main_routine_with_encryption(conn, response):
-    # RSA 공개키 검증
     verify_rsa_keypair(response)
     
-    # AES 대칭키 생성
     aes_key = generate_aes_key()
     logging.info("Generated AES key")
 
-    # RSA 공개키로 AES 대칭키 암호화
     n = response["parameter"]["p"] * response["parameter"]["q"]
     e = response["public"]
     encrypted_aes_key = encrypt_aes_key_byte_by_byte(aes_key, n, e)
     logging.info("Encrypted AES key byte-by-byte with RSA public key")
 
-    # 암호화된 대칭키를 Bob에게 전송
     send_encrypted_aes_key(conn, encrypted_aes_key)
+
+    receive_and_decrypt_message(conn, aes_key)
 
 def run(addr, port, opcode, msg_type=None):
     conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     conn.connect((addr, port))
     logging.info("Alice is connected to {}:{}".format(addr, port))
 
-    # RSA 키 요청 보내기
     if opcode == 0 and msg_type == "RSAKey":
         response = send_rsa_key_request(conn)
         if response:

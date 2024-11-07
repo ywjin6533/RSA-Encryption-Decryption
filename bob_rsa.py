@@ -4,52 +4,61 @@ import argparse
 import logging
 import json
 import select
+import base64
 from RSAKey import generate_rsa_keypair
+
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.backends import default_backend
+
+def decrypt_aes_key(encrypted_key, private_key_d, n):
+    decrypted_key = bytes([pow(byte, private_key_d, n) for byte in encrypted_key])
+    return decrypted_key
+
+def encrypt_message_aes(aes_key, message):
+    backend = default_backend()
+    cipher = Cipher(algorithms.AES(aes_key), modes.ECB(), backend=backend)
+    encryptor = cipher.encryptor()
+    padded_message = message + ' ' * (16 - len(message) % 16)
+    encrypted_message = encryptor.update(padded_message.encode()) + encryptor.finalize()
+    
+    encoded_message = base64.b64encode(encrypted_message).decode('utf-8')
+    return encoded_message
 
 def handler(sock, stop_event):
     try:
-        # Receive message from Alice
+        data = sock.recv(4096)
+        if not data:
+            logging.warning("No data received from Alice. Connection may be closed.")
+            return
+
+        received_message = data.decode()
+        logging.info("Raw data received from Alice: %s", received_message)
+        message = json.loads(received_message)
+        
+        if message.get("opcode") == 0 and message.get("type") == "RSAKey":
+            logging.info("Received RSA key generation request from Alice.")
+            rsa_keys = generate_rsa_keypair()
+            response_json = json.dumps(rsa_keys)
+            sock.sendall(response_json.encode())
+            logging.info("Sent RSA public key to Alice.")
+        
         data = sock.recv(4096)
         if data:
             received_message = data.decode()
             message = json.loads(received_message)
-            
-            # Process based on opcode and type
-            opcode = message.get("opcode")
-            msg_type = message.get("type")
+            if message.get("opcode") == 2:
+                logging.info("Received encrypted AES key from Alice.")
+                
+                encrypted_key = message.get("encrypted_key")
+                private_key_d = rsa_keys["private"]
+                n = rsa_keys["parameter"]["p"] * rsa_keys["parameter"]["q"]
 
-            if opcode == 0:
-                if msg_type == "RSAKey":
-                    logging.info("Received RSA key generation request from Alice.")
-                    
-                    # RSA 키 생성
-                    response = generate_rsa_keypair()  # RSAKey.py의 함수 호출
-                    
-                    # 응답을 JSON으로 직렬화 및 로깅
-                    response_json = json.dumps(response)
-                    logging.info("Final response to send to Alice: %s", response_json)  # 디버깅용 로그
-                    
-                    # 응답 전송
-                    sock.sendall(response_json.encode())
-
-                elif msg_type == "RSA":
-                    logging.info("Received RSA encryption/decryption request from Alice.")
-                    # RSA 암호화/복호화 로직 추가 가능
-                elif msg_type == "DH":
-                    logging.info("Received Diffie-Hellman key exchange request from Alice.")
-                    # Diffie-Hellman 처리 로직 추가 가능
-                else:
-                    logging.warning("Unknown type for opcode 0.")
-            elif opcode == 2:
-                logging.info("Received encrypted message from Alice.")
-                # 암호화된 메시지 처리 로직 추가 가능
-            elif opcode == 99 and msg_type == "exit":
-                logging.info("Received exit command. Shutting down Bob server.")
-                stop_event.set()  # Signal to stop the server
-            else:
-                logging.warning("Unknown opcode.")
-        else:
-            logging.warning("No data received from Alice.")
+                aes_key = decrypt_aes_key(encrypted_key, private_key_d, n)
+                encrypted_message = encrypt_message_aes(aes_key, "hello")
+                response = json.dumps({"opcode": 3, "encrypted_message": encrypted_message})
+                sock.sendall(response.encode())
+                logging.info("Sent encrypted message to Alice.")
+                
     except Exception as e:
         logging.error(f"Error in connection handler: {e}")
     finally:
@@ -65,13 +74,10 @@ def run(addr, port):
 
     while not stop_event.is_set():
         try:
-            # Use select to wait for incoming connections with a timeout of 1 second
             readable, _, _ = select.select([bob], [], [], 1)
             if readable:
                 conn, info = bob.accept()
                 logging.info("[*] Bob accepts the connection from {}:{}".format(info[0], info[1]))
-
-                # Start a new thread to handle the connection
                 conn_handle = threading.Thread(target=handler, args=(conn, stop_event))
                 conn_handle.start()
         except KeyboardInterrupt:
@@ -93,7 +99,6 @@ def main():
     args = command_line_args()
     log_level = args.log
     logging.basicConfig(level=log_level)
-
     run(args.addr, args.port)
 
 if __name__ == "__main__":
